@@ -1,8 +1,10 @@
 (() => {
-  const APP_ID = '111463A9';
+  const params = new URLSearchParams(window.location.search);
+  const APP_ID = (params.get('appId') || '').trim().toUpperCase();
   const status = document.getElementById('status');
   const castButton = document.getElementById('castButton');
   const stopButton = document.getElementById('stopButton');
+  const appIdInput = document.getElementById('appId');
 
   function setStatus(message) {
     status.textContent = message;
@@ -14,11 +16,20 @@
     return deviceName ? `Connected to ${deviceName}.` : 'Cast session connected.';
   }
 
+  if (appIdInput) appIdInput.value = APP_ID;
+
+  if (!APP_ID) {
+    setStatus('Enter your own Google Cast application ID, then reload using the generated link.');
+    castButton.disabled = true;
+  }
+
   window.__onGCastApiAvailable = function(isAvailable) {
     if (!isAvailable) {
       setStatus('Google Cast is not available in this browser.');
       return;
     }
+
+    if (!APP_ID) return;
 
     try {
       const context = cast.framework.CastContext.getInstance();
@@ -72,7 +83,7 @@
         }
       });
 
-      setStatus('Cast ready. Choose a Cast device to launch the interoperability receiver.');
+      setStatus(`Cast ready for receiver ${APP_ID}. Choose a Cast device to launch it.`);
     } catch (error) {
       setStatus(`Cast initialization failed: ${error}`);
     }
