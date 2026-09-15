@@ -31,8 +31,16 @@ jobs:
       - name: Build Morphe patch bundle
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gradle build --stacktrace
+        run: gradle buildAndroid --stacktrace
 
       - name: Show build outputs
         if: always()
-        run: find . -maxdepth 5 -type f \( -name '*.mpp' -o -name '*.jar' -o -name '*.json' \) -print | sort
+        run: find . -maxdepth 6 -type f \( -name '*.mpp' -o -name '*.jar' -o -name '*.json' \) -print | sort
+
+      - name: Upload patch bundle
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audible-ht-atmos-morphe-patch
+          path: patches/build/libs/*.mpp
+          if-no-files-found: error
