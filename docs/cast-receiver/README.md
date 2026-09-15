@@ -1,8 +1,18 @@
 # Audible Cast Atmos test receiver
 
-This is a test-only Google Cast Web Receiver for the Audible Home Theater Atmos investigation.
+Unofficial Google Cast interoperability experiment for the Audible Home Theater Atmos project. This project is independent and is **not affiliated with, endorsed by, or sponsored by Audible or Amazon**.
 
-It loads Google's hosted Cast Application Framework, then loads Audible's production Cast receiver JavaScript from its CloudFront URL. Before Audible's receiver starts, `patch.js` adds `ec+3` to the existing `supported_media_features` object used for the content-license request.
+This receiver loads Google's hosted Cast Application Framework, then loads Audible's production Cast receiver JavaScript from its CloudFront URL. Before Audible's receiver starts, `patch.js` adds `ec+3` to the existing `supported_media_features` object used for the content-license request.
+
+The purpose is to test whether Audible's Cast backend will return an E-AC-3/JOC Atmos representation when the receiver explicitly advertises that codec.
+
+## Privacy and security
+
+This project operates no backend service and does not collect or retain Audible credentials, access tokens, listening history, audiobook content, DRM keys, or license responses.
+
+The GitHub Pages host serves only static HTML and JavaScript. Audible authentication and content-license requests are performed by code running on the user's Cast device and are sent to Audible/Amazon services. `patch.js` does not log, store, or forward access tokens.
+
+The receiver does not bypass Audible authentication, entitlement checks, Widevine, or content encryption. Users must have legitimate access to the Audible content they play.
 
 ## GitHub Pages
 
@@ -15,6 +25,14 @@ The receiver URL will then be:
 
 `https://objectinspace.github.io/audible-HT-Atmos/cast-receiver/`
 
-Use that URL when registering an unpublished Custom Web Receiver in the Google Cast SDK Developer Console.
+Use that URL when registering a Custom Web Receiver in the Google Cast SDK Developer Console.
 
-The production Audible Cast application ID remains `25456794`; for testing, the Audible Android sender must be pointed at the new custom receiver application ID assigned by Google.
+## Cast application status
+
+The production Audible Cast application ID remains `25456794`. The test receiver has its own Google Cast application ID, and the Audible Android sender must be patched to launch that application ID.
+
+While the receiver is unpublished, only development devices registered in the owning Cast Developer Console can launch it. If the receiver is ever published for general use, the publication metadata should clearly identify it as an unofficial interoperability project and should not imply endorsement by Audible or Amazon.
+
+## Distribution
+
+Do not publish Audible APKs, copied audiobook media, decrypted content, access tokens, DRM keys, signing material, or other DRM-related secrets with this receiver. The repository should contain only the independent patch/receiver code needed for interoperability testing.
