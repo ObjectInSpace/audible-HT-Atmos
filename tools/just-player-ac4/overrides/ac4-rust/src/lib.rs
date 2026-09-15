@@ -22,6 +22,34 @@ fn throw(env: &mut JNIEnv, message: impl AsRef<str>) {
     let _ = env.throw_new("java/lang/IllegalStateException", message.as_ref());
 }
 
+/// Wrap an ISO-BMFF `raw_ac4_frame()` payload in the Annex-G AC-4 syncframe
+/// header expected reliably by oxideav-ac4 0.0.8.
+///
+/// For ordinary audiobook / IMS frames the payload is far below 65535 bytes,
+/// so the four-byte `0xAC40 + 16-bit frame_size` form is used. The extended
+/// 24-bit frame-size form is included for completeness.
+fn wrap_annex_g(raw: &[u8]) -> Result<Vec<u8>, String> {
+    let len = raw.len();
+    let mut framed;
+
+    if len < 0xffff {
+        framed = Vec::with_capacity(len + 4);
+        framed.extend_from_slice(&[0xac, 0x40]);
+        framed.extend_from_slice(&(len as u16).to_be_bytes());
+    } else if len <= 0x00ff_ffff {
+        framed = Vec::with_capacity(len + 7);
+        framed.extend_from_slice(&[0xac, 0x40, 0xff, 0xff]);
+        framed.push(((len >> 16) & 0xff) as u8);
+        framed.push(((len >> 8) & 0xff) as u8);
+        framed.push((len & 0xff) as u8);
+    } else {
+        return Err(format!("AC-4 frame is too large for Annex-G framing: {len} bytes"));
+    }
+
+    framed.extend_from_slice(raw);
+    Ok(framed)
+}
+
 #[no_mangle]
 pub extern "system" fn Java_com_brouken_player_ac4_Ac4Decoder_nativeCreate(
     _env: JNIEnv,
@@ -52,12 +80,16 @@ pub extern "system" fn Java_com_brouken_player_ac4_Ac4Decoder_nativeDecode(
 ) -> jbyteArray {
     let result = (|| {
         let ctx = ptr_mut(context);
-        let bytes = env
+        let raw = env
             .convert_byte_array(&compressed)
             .map_err(|e| format!("JNI input copy failed: {e}"))?;
 
         // Media3's MP4 extractor supplies a bare ISO-BMFF raw_ac4_frame sample.
-        let packet = Packet::new(0, TimeBase::new(1, 48_000), bytes);
+        // oxideav-ac4 0.0.8 is more reliable when a real Annex-G sync header is
+        // present at offset zero; this also prevents an incidental 0xAC40 byte
+        // sequence inside the payload from being mistaken for the frame start.
+        let framed = wrap_annex_g(&raw)?;
+        let packet = Packet::new(0, TimeBase::new(1, 48_000), framed);
         ctx.decoder
             .send_packet(&packet)
             .map_err(|e| e.to_string())?;
