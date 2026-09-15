@@ -77,6 +77,22 @@ Use Morphe Manager or Morphe Desktop with the original supported Audible 26.36.0
 
 Because the output APK is re-signed, an installed stock Audible build signed by Amazon generally must be uninstalled before installing the patched APK.
 
+## Cast receiver workflow
+
+The Cast receiver under `docs/cast-receiver/` is an experimental interoperability component. The recommended distribution model is **not** to use a single public receiver owned by this project.
+
+Each user should instead:
+
+1. fork or otherwise host the receiver over HTTPS,
+2. register their own Custom Web Receiver in the Google Cast SDK Developer Console,
+3. register their own Cast test device(s),
+4. use the resulting Cast application ID in the project's Web Sender at `docs/sender/`, and
+5. patch their local Audible sender so its production Cast application ID (`25456794`) is replaced with their own receiver ID.
+
+The Web Sender accepts a receiver ID interactively or through `?appId=YOUR_APP_ID` and does not contain a project-global receiver ID.
+
+The current Morphe bundle contains the **native codec-selection patch only**. The Cast receiver-ID replacement was validated separately as a prototype and still needs to be packaged as a configurable Morphe patch before this becomes a one-step Cast workflow.
+
 ## Safety / compatibility
 
 Do not remove the hash guard merely to make a newer Audible build patch. The byte offset is specific to the tested 26.36.09 DEX. Future versions should be analyzed and either given a new guarded raw patch or migrated to a semantic bytecode fingerprint once the equivalent method is identified and verified.
@@ -84,5 +100,3 @@ Do not remove the hash guard merely to make a newer Audible build patch. The byt
 ## Distribution
 
 Distribute patch source and patch bundles only. Do not distribute Audible APKs, Audible assets, decrypted media, signing material, access tokens, DRM keys, or other DRM-related secrets.
-
-The Cast receiver under `docs/cast-receiver/` is an experimental interoperability component and should be evaluated independently before any public Cast application publication.
