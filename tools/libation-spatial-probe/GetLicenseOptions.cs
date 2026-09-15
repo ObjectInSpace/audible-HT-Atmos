@@ -1,4 +1,5 @@
 using ApplicationServices;
+using AudibleApi;
 using AudibleApi.Common;
 using CommandLine;
 using DataLayer;
