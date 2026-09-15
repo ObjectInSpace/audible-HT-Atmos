@@ -1,0 +1,57 @@
+name: Build Libation spatial probe
+
+on:
+  push:
+    branches:
+      - ac4-player-poc-build
+    paths:
+      - 'tools/libation-spatial-probe/**'
+      - '.github/workflows/build-libation-spatial-probe.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout host repo
+        uses: actions/checkout@v4
+        with:
+          path: host
+
+      - name: Checkout Libation
+        shell: pwsh
+        run: |
+          git clone https://github.com/rmcrackan/Libation.git Libation
+          Set-Location Libation
+          git checkout a0842f1b3bf52dc067804e28d655f2d672ef2f8f
+          Copy-Item ..\host\tools\libation-spatial-probe\GetLicenseOptions.cs Source\LibationCli\Options\GetLicenseOptions.cs -Force
+          git diff --check
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish Libation CLI probe
+        shell: pwsh
+        run: |
+          dotnet publish Libation\Source\LibationCli\LibationCli.csproj -c Release -r win-x64 --self-contained true -o LibationProbe
+
+      - name: Verify probe command exists
+        shell: pwsh
+        run: |
+          .\LibationProbe\LibationCli.exe get-license --help | Tee-Object -FilePath probe-help.txt
+          Select-String -Path probe-help.txt -Pattern 'probe-spatial'
+
+      - name: Package artifact
+        shell: pwsh
+        run: |
+          Compress-Archive -Path LibationProbe\* -DestinationPath Libation-Spatial-Probe-win-x64.zip
+
+      - name: Upload probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: Libation-Spatial-Probe-win-x64
+          path: Libation-Spatial-Probe-win-x64.zip
+          if-no-files-found: error
