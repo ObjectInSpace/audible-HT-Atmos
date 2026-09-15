@@ -7,7 +7,9 @@
   <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
   <style>
     body { font-family: sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
-    button { font: inherit; padding: .6rem .9rem; margin-right: .5rem; }
+    button, input { font: inherit; padding: .6rem .9rem; }
+    button { margin-right: .5rem; }
+    input { width: 12rem; }
     #status { margin-top: 1rem; }
   </style>
 </head>
@@ -15,6 +17,13 @@
   <h1>Home Theater Audio Interop Sender</h1>
   <p>Independent Cast interoperability test utility. Not affiliated with or endorsed by Audible or Amazon.</p>
   <p>This page does not collect credentials, listening history, or media content.</p>
+
+  <form method="get">
+    <label for="appId">Your Cast application ID:</label>
+    <input id="appId" name="appId" inputmode="text" autocomplete="off" maxlength="32">
+    <button type="submit">Use this receiver</button>
+  </form>
+
   <p><button id="castButton" type="button">Choose Cast device</button><button id="stopButton" type="button">Stop Cast session</button></p>
   <p id="status" role="status" aria-live="polite">Initializing Cast...</p>
   <script src="sender.js"></script>
