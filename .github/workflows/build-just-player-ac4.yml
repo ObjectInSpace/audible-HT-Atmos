@@ -1,0 +1,75 @@
+name: Build Just Player AC-4 POC
+
+on:
+  push:
+    branches:
+      - ac4-player-poc-build
+    paths:
+      - 'tools/just-player-ac4/**'
+      - '.github/workflows/build-just-player-ac4.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout POC host repo
+        uses: actions/checkout@v4
+        with:
+          path: host
+
+      - name: Checkout Just Player target revision
+        run: |
+          git clone https://github.com/moneytoo/Player.git Player
+          cd Player
+          git checkout 09b7b94d39d4a679dddb43e3226c0c9c23cc1a37
+          git apply ../host/tools/just-player-ac4/just-player-ac4-oxideav.patch
+          git diff --check
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform and NDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-37' 'build-tools;36.0.0' 'ndk;29.0.14206865'
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/29.0.14206865" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/29.0.14206865" >> "$GITHUB_ENV"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Build OxideAV AC-4 JNI library
+        working-directory: Player
+        run: bash scripts/build-ac4-rust.sh
+
+      - name: Build Just Player debug APK
+        working-directory: Player
+        run: ./gradlew --stacktrace assembleLatestUniversalDebug
+
+      - name: Verify native library is packaged
+        working-directory: Player
+        run: |
+          APK=$(find app/build/outputs/apk -name '*.apk' -type f | head -n 1)
+          test -n "$APK"
+          echo "APK=$APK"
+          unzip -l "$APK" | grep 'lib/arm64-v8a/libac4oxide.so'
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Just-Player-AC4-POC-arm64
+          path: Player/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
