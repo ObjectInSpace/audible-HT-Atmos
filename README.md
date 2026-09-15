@@ -1,6 +1,6 @@
 # Audible Home Theater Atmos patch
 
-Private Morphe patch for Audible for Android.
+Unofficial interoperability project for Audible for Android. This project is independent and is **not affiliated with, endorsed by, or sponsored by Audible or Amazon**.
 
 ## What it does
 
@@ -18,6 +18,14 @@ The implementation reproduces the single-byte DEX change from the already-tested
 ## Scope
 
 The patch changes codec capability selection only. It does **not** bypass Audible authentication, entitlement checks, Widevine, or content encryption, and it does not extract or redistribute audiobook media.
+
+Users must have legitimate access to any Audible content they play. This project does not provide Audible accounts, credentials, licenses, decryption keys, or audiobook files.
+
+## Privacy and security
+
+The project does not operate a backend service and does not collect or retain Audible credentials, access tokens, listening history, audiobook content, DRM keys, or license responses.
+
+The optional Cast receiver is hosted as static client-side code. Authentication and content requests remain between the user's Cast device and Audible/Amazon services. The repository does not contain or distribute Audible APKs, decrypted media, signing material, access tokens, or DRM secrets.
 
 ## Tested behavior
 
@@ -75,4 +83,6 @@ Do not remove the hash guard merely to make a newer Audible build patch. The byt
 
 ## Distribution
 
-Keep this repository private for now. If it is ever published, distribute patch source/bundles only, not Audible APKs, Audible assets, decrypted media, signing material, or DRM-related secrets.
+Distribute patch source and patch bundles only. Do not distribute Audible APKs, Audible assets, decrypted media, signing material, access tokens, DRM keys, or other DRM-related secrets.
+
+The Cast receiver under `docs/cast-receiver/` is an experimental interoperability component and should be evaluated independently before any public Cast application publication.
