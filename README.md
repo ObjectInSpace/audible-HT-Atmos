@@ -39,7 +39,35 @@ The patch source is:
 
 `patches/src/main/kotlin/app/morphe/patches/audible/PreferJocSpatialAudioPatch.kt`
 
-The project currently uses the Morphe patches Gradle plugin declared in `settings.gradle.kts`.
+The project uses Morphe patches Gradle plugin 1.3.4 and Morphe Patcher 1.13.0.
+
+### Build
+
+Morphe's build task is:
+
+```bash
+gradle buildAndroid
+```
+
+or, when the Gradle wrapper from the Morphe template is present:
+
+```bash
+./gradlew buildAndroid
+```
+
+The generated bundle is written under:
+
+`patches/build/libs/*.mpp`
+
+GitHub Actions also runs `buildAndroid` on pushes and pull requests and uploads the resulting `.mpp` as the `audible-ht-atmos-morphe-patch` workflow artifact.
+
+The current source has been successfully built by GitHub Actions as `patches-0.1.0.mpp`.
+
+### Applying for testing
+
+Use Morphe Manager or Morphe Desktop with the original supported Audible 26.36.09 APK and this `.mpp` bundle. Select **Prefer E-AC-3/JOC spatial audio** and patch the APK normally. The strict DEX hash guard will reject an APK whose `classes5.dex` is not the tested build.
+
+Because the output APK is re-signed, an installed stock Audible build signed by Amazon generally must be uninstalled before installing the patched APK.
 
 ## Safety / compatibility
 
