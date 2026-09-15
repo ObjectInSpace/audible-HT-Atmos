@@ -1,6 +1,19 @@
 (() => {
   const nativeStringify = JSON.stringify;
-  const preferredCodecs = ["mp4a.40.2", "mp4a.40.42", "ec+3"];
+  const AAC_LC = "mp4a.40.2";
+  const XHE_AAC = "mp4a.40.42";
+  const EC3_JOC = "ec+3";
+  const AC4 = "ac-4";
+
+  function supportsEc3() {
+    try {
+      const context = cast.framework.CastReceiverContext.getInstance();
+      return context.canDisplayType('audio/mp4; codecs="ec-3"') === true;
+    } catch (_) {
+      // If capability detection is unavailable, prefer the safe AAC path.
+      return false;
+    }
+  }
 
   JSON.stringify = function(value, replacer, space) {
     try {
@@ -12,25 +25,37 @@
         value.supported_media_features.catalog_samples === true
       ) {
         const features = { ...value.supported_media_features };
-        const codecs = Array.isArray(features.codecs) ? [...features.codecs] : [];
+        const ec3Supported = supportsEc3();
 
-        for (const codec of preferredCodecs) {
-          if (!codecs.includes(codec)) codecs.push(codec);
-        }
+        // Start from the receiver's existing list, but remove spatial codecs so
+        // this shim controls when they are advertised.
+        const codecs = Array.isArray(features.codecs)
+          ? features.codecs.filter(codec => codec !== EC3_JOC && codec !== AC4)
+          : [];
 
-        // Do not advertise AC-4. The goal is to make E-AC-3/JOC the
-        // available spatial representation while retaining AAC fallbacks.
-        features.codecs = codecs.filter(codec => codec !== "ac-4");
+        // Keep broadly compatible Audible fallbacks available.
+        if (!codecs.includes(AAC_LC)) codecs.push(AAC_LC);
+        if (!codecs.includes(XHE_AAC)) codecs.push(XHE_AAC);
+
+        // Audible uses ec+3 for E-AC-3/JOC. Advertise it only when the Cast
+        // receiver reports E-AC-3 support. AC-4 is intentionally never added.
+        if (ec3Supported && !codecs.includes(EC3_JOC)) codecs.push(EC3_JOC);
+
+        features.codecs = codecs;
 
         value = {
           ...value,
-          spatial: true,
+          spatial: ec3Supported,
           supported_media_features: features,
         };
 
         console.info(
-          "[Audible Atmos test] Advertising spatial playback with codecs:",
-          features.codecs
+          "[Audible Atmos test] E-AC-3 support:",
+          ec3Supported,
+          "advertising codecs:",
+          features.codecs,
+          "spatial:",
+          value.spatial
         );
       }
     } catch (_) {
