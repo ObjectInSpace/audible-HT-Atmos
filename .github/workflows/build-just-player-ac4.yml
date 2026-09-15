@@ -26,6 +26,15 @@ jobs:
           git checkout 09b7b94d39d4a679dddb43e3226c0c9c23cc1a37
           git apply ../host/tools/just-player-ac4/just-player-ac4-oxideav.patch
           cp ../host/tools/just-player-ac4/overrides/ac4-rust/src/lib.rs ac4-rust/src/lib.rs
+          # Use current upstream oxideav-ac4 rather than the much older crates.io 0.0.8 release.
+          # Pin both AC-4 and core for reproducibility and force the transitive core dependency
+          # onto the same revision so the Decoder/Packet types are identical.
+          sed -i 's#oxideav-ac4 = "0.0.8"#oxideav-ac4 = { git = "https://github.com/OxideAV/oxideav-ac4.git", rev = "08a570fa60dea25d426260ad396763c3827ec969" }#' ac4-rust/Cargo.toml
+          cat >> ac4-rust/Cargo.toml <<'EOF'
+
+          [patch.crates-io]
+          oxideav-core = { git = "https://github.com/OxideAV/oxideav-core.git", rev = "aa357dca86311fda224c19e4989996f46be1de44" }
+          EOF
           # The hosted SDK currently exposes Android 36, not the project's Android 37 platform.
           # This clear local-file POC does not use API-37-only APIs. OkHttp 5.3.2 is also known to
           # build against compileSdk 36, while 5.5.0 declares minCompileSdk 37.
@@ -80,6 +89,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Just-Player-AC4-POC-arm64
+          name: Just-Player-AC4-POC-arm64-upstream
           path: Player/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
