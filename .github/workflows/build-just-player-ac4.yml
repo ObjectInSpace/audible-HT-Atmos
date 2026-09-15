@@ -25,6 +25,7 @@ jobs:
           cd Player
           git checkout 09b7b94d39d4a679dddb43e3226c0c9c23cc1a37
           git apply ../host/tools/just-player-ac4/just-player-ac4-oxideav.patch
+          cp ../host/tools/just-player-ac4/overrides/ac4-rust/src/lib.rs ac4-rust/src/lib.rs
           # API 37 is not in the public SDK channel on the hosted runner yet.
           # The POC does not use API-37-only APIs; Just Player already targets 36.
           sed -i 's/compileSdk = 37/compileSdk = 36/' app/build.gradle
