@@ -41,8 +41,9 @@ jobs:
       - name: Verify probe command exists
         shell: pwsh
         run: |
-          .\LibationProbe\LibationCli.exe get-license --help | Tee-Object -FilePath probe-help.txt
-          Select-String -Path probe-help.txt -Pattern 'probe-spatial'
+          $help = .\LibationProbe\LibationCli.exe get-license --help 2>&1 | Out-String
+          Write-Host $help
+          if ($help -notmatch 'probe-spatial') { throw 'probe-spatial option missing from help output' }
 
       - name: Package artifact
         shell: pwsh
