@@ -6,26 +6,9 @@ This receiver loads Google's hosted Cast Application Framework, then loads Audib
 
 Based on the request shape used by other Audible clients and open-source Audible tooling, spatial playback is represented by two separate signals: a top-level `spatial` flag and codec capability advertisement under `supported_media_features.codecs`.
 
-## Codec policy
+The shim always advertises AAC-LC (`mp4a.40.2`) and xHE-AAC (`mp4a.40.42`). It dynamically advertises E-AC-3/JOC (`ec+3`) and sets `spatial: true` only when the Cast receiver reports E-AC-3 playback capability. Otherwise it leaves `ec+3` out and sets `spatial: false` so Audible can fall back to xHE-AAC/AAC-LC.
 
-The shim uses Cast's documented `CastReceiverContext.canDisplayType()` capability query for E-AC-3 (`audio/mp4; codecs="ec-3"`).
-
-If the Cast target reports E-AC-3 support, the receiver advertises:
-
-- AAC-LC: `mp4a.40.2`
-- xHE-AAC: `mp4a.40.42`
-- E-AC-3/JOC: `ec+3`
-- `spatial: true`
-
-If the Cast target does not report E-AC-3 support, the receiver advertises only:
-
-- AAC-LC: `mp4a.40.2`
-- xHE-AAC: `mp4a.40.42`
-- `spatial: false`
-
-AC-4 (`ac-4`) is deliberately never advertised. On Cast targets that can use E-AC-3/JOC, the project prefers that representation. On targets that cannot decode E-AC-3, xHE-AAC/AAC-LC remain available as fallbacks.
-
-This policy checks E-AC-3 decode/passthrough capability rather than requiring Dolby Atmos rendering capability. A target may therefore receive an `ec+3` source whenever Cast reports E-AC-3 support, even if the attached audio system cannot render JOC/Atmos metadata.
+It deliberately does **not** advertise AC-4. The goal is to prefer E-AC-3/JOC where the Cast target can decode it while retaining high-quality AAC fallback everywhere else.
 
 ## Privacy and security
 
@@ -35,24 +18,29 @@ The GitHub Pages host serves only static HTML and JavaScript. Audible authentica
 
 The receiver does not bypass Audible authentication, entitlement checks, Widevine, or content encryption. Users must have legitimate access to the Audible content they play.
 
-## GitHub Pages
+## Hosting and registration
 
-Configure this repository's Pages source as:
+The recommended model is for each user to host/register their own receiver rather than rely on a shared public Cast application.
 
-- Branch: `main`
-- Folder: `/docs`
+1. Fork or otherwise host this receiver over HTTPS.
+2. Register the receiver URL as a Custom Web Receiver in the Google Cast SDK Developer Console.
+3. Register the Cast devices you want to use while the receiver remains unpublished.
+4. Copy the Cast application ID assigned by Google.
+5. Use that ID with the project's Web Sender (`docs/sender/`) and with your local Audible sender patch.
 
-The receiver URL will then be:
+The production Audible Cast application ID remains `25456794`. To use this custom receiver from Audible for Android, the local sender APK must be patched so that ID is replaced with the user's own Cast application ID.
+
+## GitHub Pages example
+
+If this repository is forked and Pages is configured from `main` / `/docs`, the receiver URL follows this pattern:
+
+`https://YOUR_GITHUB_USERNAME.github.io/YOUR_REPOSITORY/cast-receiver/`
+
+The original project instance is available at:
 
 `https://objectinspace.github.io/audible-HT-Atmos/cast-receiver/`
 
-Use that URL when registering a Custom Web Receiver in the Google Cast SDK Developer Console.
-
-## Cast application status
-
-The production Audible Cast application ID remains `25456794`. The test receiver has its own Google Cast application ID, and the Audible Android sender must be patched to launch that application ID.
-
-While the receiver is unpublished, only development devices registered in the owning Cast Developer Console can launch it. If the receiver is ever published for general use, the publication metadata should clearly identify it as an unofficial interoperability project and should not imply endorsement by Audible or Amazon.
+but users are not expected to share a single project-owned Cast application ID.
 
 ## Distribution
 
