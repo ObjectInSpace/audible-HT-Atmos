@@ -1,0 +1,476 @@
+diff --git a/app/src/main/java/com/brouken/player/PlayerActivity.java b/app/src/main/java/com/brouken/player/PlayerActivity.java
+--- a/app/src/main/java/com/brouken/player/PlayerActivity.java
++++ b/app/src/main/java/com/brouken/player/PlayerActivity.java
+@@ -1223,6 +1223,6 @@
+         DefaultExtractorsFactory extractorsFactory = new DefaultExtractorsFactory()
+                 .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS)
+                 .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE);
+-        @SuppressLint("WrongConstant") RenderersFactory renderersFactory = new DefaultRenderersFactory(this)
++        @SuppressLint("WrongConstant") RenderersFactory renderersFactory = new com.brouken.player.ac4.Ac4RenderersFactory(this)
+                 .setExtensionRendererMode(mPrefs.decoderPriority)
+                 .setMapDV7ToHevc(mPrefs.mapDV7ToHevc);
+diff --git a/ac4-rust/Cargo.toml b/ac4-rust/Cargo.toml
+new file mode 100644
+--- /dev/null
++++ b/ac4-rust/Cargo.toml
+@@ -0,0 +1,13 @@
++[package]
++name = "ac4oxide"
++version = "0.1.0"
++edition = "2021"
++rust-version = "1.80"
++
++[lib]
++crate-type = ["cdylib"]
++
++[dependencies]
++jni = "0.21"
++oxideav-core = "0.1"
++oxideav-ac4 = "0.0.8"
+diff --git a/ac4-rust/src/lib.rs b/ac4-rust/src/lib.rs
+new file mode 100644
+--- /dev/null
++++ b/ac4-rust/src/lib.rs
+@@ -0,0 +1,141 @@
++use jni::{
++    objects::{JByteArray, JClass},
++    sys::{jbyteArray, jint, jlong},
++    JNIEnv,
++};
++use oxideav_core::{
++    CodecId, CodecParameters, Decoder, Frame, Packet, RuntimeContext, SampleFormat, TimeBase,
++};
++
++struct Ac4Context {
++    decoder: Box<dyn Decoder>,
++    channels: i32,
++    sample_rate: i32,
++}
++
++fn ptr_mut<'a>(p: jlong) -> &'a mut Ac4Context {
++    assert_ne!(p, 0);
++    unsafe { &mut *(p as *mut Ac4Context) }
++}
++
++fn throw(env: &mut JNIEnv, message: impl AsRef<str>) {
++    let _ = env.throw_new("java/lang/IllegalStateException", message.as_ref());
++}
++
++#[no_mangle]
++pub extern "system" fn Java_com_brouken_player_ac4_Ac4Decoder_nativeCreate(
++    mut env: JNIEnv,
++    _class: JClass,
++) -> jlong {
++    let result = (|| {
++        let mut runtime = RuntimeContext::new();
++        oxideav_ac4::register(&mut runtime);
++
++        // This first POC deliberately targets Dolby's 48 kHz stereo IMS fixture.
++        let mut params = CodecParameters::audio(CodecId::new("ac4"));
++        params.sample_rate = Some(48_000);
++        params.channels = Some(2);
++        params.sample_format = Some(SampleFormat::S16);
++        let decoder = runtime.codecs.make_decoder(&params)?;
++
++        Ok::<_, oxideav_core::Error>(Ac4Context {
++            decoder,
++            channels: 2,
++            sample_rate: 48_000,
++        })
++    })();
++
++    match result {
++        Ok(ctx) => Box::into_raw(Box::new(ctx)) as jlong,
++        Err(e) => {
++            throw(&mut env, format!("OxideAV decoder creation failed: {e}"));
++            0
++        }
++    }
++}
++
++#[no_mangle]
++pub extern "system" fn Java_com_brouken_player_ac4_Ac4Decoder_nativeDecode(
++    mut env: JNIEnv,
++    _class: JClass,
++    context: jlong,
++    compressed: JByteArray,
++) -> jbyteArray {
++    let result = (|| {
++        let ctx = ptr_mut(context);
++        let bytes = env
++            .convert_byte_array(&compressed)
++            .map_err(|e| format!("JNI input copy failed: {e}"))?;
++
++        // Media3's MP4 extractor supplies a bare ISO-BMFF raw_ac4_frame sample.
++        let packet = Packet::new(0, TimeBase::new(1, 48_000), bytes);
++        ctx.decoder
++            .send_packet(&packet)
++            .map_err(|e| e.to_string())?;
++
++        let frame = ctx.decoder.receive_frame().map_err(|e| e.to_string())?;
++        let Frame::Audio(audio) = frame else {
++            return Err("OxideAV returned a non-audio frame".to_string());
++        };
++
++        // For SampleFormat::S16 the AC-4 decoder returns one interleaved PCM plane.
++        let pcm = audio
++            .data
++            .first()
++            .ok_or_else(|| "OxideAV returned no PCM plane".to_string())?;
++
++        let array = env
++            .byte_array_from_slice(pcm)
++            .map_err(|e| format!("JNI output allocation failed: {e}"))?;
++        Ok::<jbyteArray, String>(array.into_raw())
++    })();
++
++    match result {
++        Ok(array) => array,
++        Err(e) => {
++            throw(&mut env, format!("OxideAV AC-4 decode failed: {e}"));
++            std::ptr::null_mut()
++        }
++    }
++}
++
++#[no_mangle]
++pub extern "system" fn Java_com_brouken_player_ac4_Ac4Decoder_nativeGetChannelCount(
++    _env: JNIEnv,
++    _class: JClass,
++    context: jlong,
++) -> jint {
++    ptr_mut(context).channels as jint
++}
++
++#[no_mangle]
++pub extern "system" fn Java_com_brouken_player_ac4_Ac4Decoder_nativeGetSampleRate(
++    _env: JNIEnv,
++    _class: JClass,
++    context: jlong,
++) -> jint {
++    ptr_mut(context).sample_rate as jint
++}
++
++#[no_mangle]
++pub extern "system" fn Java_com_brouken_player_ac4_Ac4Decoder_nativeReset(
++    mut env: JNIEnv,
++    _class: JClass,
++    context: jlong,
++) {
++    let ctx = ptr_mut(context);
++    if let Err(e) = ctx.decoder.reset() {
++        throw(&mut env, format!("OxideAV reset failed: {e}"));
++    }
++}
++
++#[no_mangle]
++pub extern "system" fn Java_com_brouken_player_ac4_Ac4Decoder_nativeRelease(
++    _env: JNIEnv,
++    _class: JClass,
++    context: jlong,
++) {
++    if context != 0 {
++        unsafe { drop(Box::from_raw(context as *mut Ac4Context)); }
++    }
++}
+diff --git a/app/src/main/java/com/brouken/player/ac4/Ac4AudioRenderer.java b/app/src/main/java/com/brouken/player/ac4/Ac4AudioRenderer.java
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/java/com/brouken/player/ac4/Ac4AudioRenderer.java
+@@ -0,0 +1,69 @@
++package com.brouken.player.ac4;
++
++import static com.google.common.base.Preconditions.checkNotNull;
++
++import android.os.Handler;
++import androidx.annotation.Nullable;
++import androidx.media3.common.C;
++import androidx.media3.common.Format;
++import androidx.media3.common.MimeTypes;
++import androidx.media3.common.util.UnstableApi;
++import androidx.media3.common.util.Util;
++import androidx.media3.decoder.CryptoConfig;
++import androidx.media3.exoplayer.audio.AudioRendererEventListener;
++import androidx.media3.exoplayer.audio.AudioSink;
++import androidx.media3.exoplayer.audio.DecoderAudioRenderer;
++
++/** Software AC-4 audio renderer backed by OxideAV. Clear-content proof of concept. */
++@UnstableApi
++public final class Ac4AudioRenderer extends DecoderAudioRenderer<Ac4Decoder> {
++    private static final int NUM_BUFFERS = 16;
++
++    public Ac4AudioRenderer(
++            @Nullable Handler eventHandler,
++            @Nullable AudioRendererEventListener eventListener,
++            AudioSink audioSink) {
++        super(eventHandler, eventListener, audioSink);
++    }
++
++    @Override
++    public String getName() {
++        return "OxideAVAc4AudioRenderer";
++    }
++
++    @Override
++    protected @C.FormatSupport int supportsFormatInternal(Format format) {
++        if (!MimeTypes.AUDIO_AC4.equals(format.sampleMimeType)) {
++            return C.FORMAT_UNSUPPORTED_TYPE;
++        }
++        if (format.cryptoType != C.CRYPTO_TYPE_NONE) {
++            return C.FORMAT_UNSUPPORTED_DRM;
++        }
++        int channels = format.channelCount != Format.NO_VALUE ? format.channelCount : 2;
++        int sampleRate = format.sampleRate != Format.NO_VALUE ? format.sampleRate : 48000;
++        Format pcm = Util.getPcmFormat(C.ENCODING_PCM_16BIT, channels, sampleRate);
++        return sinkSupportsFormat(pcm) ? C.FORMAT_HANDLED : C.FORMAT_UNSUPPORTED_SUBTYPE;
++    }
++
++    @Override
++    public @AdaptiveSupport int supportsMixedMimeTypeAdaptation() {
++        return ADAPTIVE_NOT_SEAMLESS;
++    }
++
++    @Override
++    protected Ac4Decoder createDecoder(Format format, @Nullable CryptoConfig cryptoConfig)
++            throws Ac4DecoderException {
++        return new Ac4Decoder(NUM_BUFFERS, NUM_BUFFERS);
++    }
++
++    @Override
++    protected Format getOutputFormat(Ac4Decoder decoder) {
++        checkNotNull(decoder);
++        return new Format.Builder()
++                .setSampleMimeType(MimeTypes.AUDIO_RAW)
++                .setChannelCount(decoder.getChannelCount())
++                .setSampleRate(decoder.getSampleRate())
++                .setPcmEncoding(C.ENCODING_PCM_16BIT)
++                .build();
++    }
++}
+diff --git a/app/src/main/java/com/brouken/player/ac4/Ac4Decoder.java b/app/src/main/java/com/brouken/player/ac4/Ac4Decoder.java
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/java/com/brouken/player/ac4/Ac4Decoder.java
+@@ -0,0 +1,108 @@
++package com.brouken.player.ac4;
++
++import androidx.annotation.Nullable;
++import androidx.media3.common.util.UnstableApi;
++import androidx.media3.common.util.Util;
++import androidx.media3.decoder.DecoderInputBuffer;
++import androidx.media3.decoder.SimpleDecoder;
++import androidx.media3.decoder.SimpleDecoderOutputBuffer;
++import java.nio.ByteBuffer;
++
++/** Media3 SimpleDecoder wrapper around the OxideAV AC-4 decoder. */
++@UnstableApi
++public final class Ac4Decoder
++        extends SimpleDecoder<DecoderInputBuffer, SimpleDecoderOutputBuffer, Ac4DecoderException> {
++    private static final int DEFAULT_INPUT_BUFFER_SIZE = 8192;
++
++    static {
++        System.loadLibrary("ac4oxide");
++    }
++
++    private long nativeContext;
++    private volatile int channelCount = 2;
++    private volatile int sampleRate = 48000;
++
++    public Ac4Decoder(int numInputBuffers, int numOutputBuffers) throws Ac4DecoderException {
++        super(new DecoderInputBuffer[numInputBuffers], new SimpleDecoderOutputBuffer[numOutputBuffers]);
++        nativeContext = nativeCreate();
++        if (nativeContext == 0) {
++            throw new Ac4DecoderException("Could not create OxideAV AC-4 decoder");
++        }
++        setInitialInputBufferSize(DEFAULT_INPUT_BUFFER_SIZE);
++    }
++
++    @Override
++    public String getName() {
++        return "OxideAV AC-4";
++    }
++
++    @Override
++    protected DecoderInputBuffer createInputBuffer() {
++        return new DecoderInputBuffer(DecoderInputBuffer.BUFFER_REPLACEMENT_MODE_NORMAL);
++    }
++
++    @Override
++    protected SimpleDecoderOutputBuffer createOutputBuffer() {
++        return new SimpleDecoderOutputBuffer(this::releaseOutputBuffer);
++    }
++
++    @Override
++    protected Ac4DecoderException createUnexpectedDecodeException(Throwable error) {
++        return new Ac4DecoderException("Unexpected AC-4 decode error", error);
++    }
++
++    @Override
++    @Nullable
++    protected Ac4DecoderException decode(
++            DecoderInputBuffer inputBuffer,
++            SimpleDecoderOutputBuffer outputBuffer,
++            boolean reset) {
++        try {
++            if (reset) {
++                nativeReset(nativeContext);
++            }
++
++            ByteBuffer inputData = Util.castNonNull(inputBuffer.data).duplicate();
++            byte[] compressed = new byte[inputData.remaining()];
++            inputData.get(compressed);
++
++            byte[] pcm = nativeDecode(nativeContext, compressed);
++            if (pcm == null || pcm.length == 0) {
++                outputBuffer.shouldBeSkipped = true;
++                return null;
++            }
++
++            channelCount = nativeGetChannelCount(nativeContext);
++            sampleRate = nativeGetSampleRate(nativeContext);
++            if (channelCount <= 0 || sampleRate <= 0) {
++                return new Ac4DecoderException("Decoder returned invalid output format");
++            }
++
++            ByteBuffer outputData = outputBuffer.init(inputBuffer.timeUs, pcm.length);
++            outputData.put(pcm);
++            outputData.flip();
++            return null;
++        } catch (RuntimeException e) {
++            return new Ac4DecoderException("AC-4 decode failed", e);
++        }
++    }
++
++    public int getChannelCount() { return channelCount; }
++    public int getSampleRate() { return sampleRate; }
++
++    @Override
++    public void release() {
++        super.release();
++        if (nativeContext != 0) {
++            nativeRelease(nativeContext);
++            nativeContext = 0;
++        }
++    }
++
++    private static native long nativeCreate();
++    private static native byte[] nativeDecode(long context, byte[] compressed);
++    private static native int nativeGetChannelCount(long context);
++    private static native int nativeGetSampleRate(long context);
++    private static native void nativeReset(long context);
++    private static native void nativeRelease(long context);
++}
+diff --git a/app/src/main/java/com/brouken/player/ac4/Ac4DecoderException.java b/app/src/main/java/com/brouken/player/ac4/Ac4DecoderException.java
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/java/com/brouken/player/ac4/Ac4DecoderException.java
+@@ -0,0 +1,10 @@
++package com.brouken.player.ac4;
++
++import androidx.media3.common.util.UnstableApi;
++import androidx.media3.decoder.DecoderException;
++
++@UnstableApi
++public final class Ac4DecoderException extends DecoderException {
++    public Ac4DecoderException(String message) { super(message); }
++    public Ac4DecoderException(String message, Throwable cause) { super(message, cause); }
++}
+diff --git a/app/src/main/java/com/brouken/player/ac4/Ac4RenderersFactory.java b/app/src/main/java/com/brouken/player/ac4/Ac4RenderersFactory.java
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/java/com/brouken/player/ac4/Ac4RenderersFactory.java
+@@ -0,0 +1,42 @@
++package com.brouken.player.ac4;
++
++import android.content.Context;
++import android.os.Handler;
++import androidx.media3.common.util.UnstableApi;
++import androidx.media3.exoplayer.DefaultRenderersFactory;
++import androidx.media3.exoplayer.Renderer;
++import androidx.media3.exoplayer.audio.AudioRendererEventListener;
++import androidx.media3.exoplayer.audio.AudioSink;
++import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
++import java.util.ArrayList;
++
++/** Adds the OxideAV AC-4 software renderer before the normal MediaCodec audio renderer. */
++@UnstableApi
++public final class Ac4RenderersFactory extends DefaultRenderersFactory {
++    public Ac4RenderersFactory(Context context) {
++        super(context);
++    }
++
++    @Override
++    protected void buildAudioRenderers(
++            Context context,
++            @ExtensionRendererMode int extensionRendererMode,
++            MediaCodecSelector mediaCodecSelector,
++            boolean enableDecoderFallback,
++            AudioSink audioSink,
++            Handler eventHandler,
++            AudioRendererEventListener eventListener,
++            ArrayList<Renderer> out) {
++        // It only claims audio/ac4, so every other codec falls through to Just Player unchanged.
++        out.add(new Ac4AudioRenderer(eventHandler, eventListener, audioSink));
++        super.buildAudioRenderers(
++                context,
++                extensionRendererMode,
++                mediaCodecSelector,
++                enableDecoderFallback,
++                audioSink,
++                eventHandler,
++                eventListener,
++                out);
++    }
++}
+diff --git a/scripts/build-ac4-rust.ps1 b/scripts/build-ac4-rust.ps1
+new file mode 100644
+--- /dev/null
++++ b/scripts/build-ac4-rust.ps1
+@@ -0,0 +1,12 @@
++$ErrorActionPreference = "Stop"
++$Root = Resolve-Path (Join-Path $PSScriptRoot "..")
++Push-Location $Root
++try {
++    if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { throw "cargo not found" }
++    if (-not (Get-Command cargo-ndk -ErrorAction SilentlyContinue)) { cargo install cargo-ndk }
++    rustup target add aarch64-linux-android
++    Push-Location "ac4-rust"
++    try {
++        cargo ndk -t arm64-v8a -p 23 -o ../app/src/main/jniLibs build --release
++    } finally { Pop-Location }
++} finally { Pop-Location }
+diff --git a/scripts/build-ac4-rust.sh b/scripts/build-ac4-rust.sh
+new file mode 100644
+--- /dev/null
++++ b/scripts/build-ac4-rust.sh
+@@ -0,0 +1,8 @@
++#!/usr/bin/env bash
++set -euo pipefail
++cd "$(dirname "$0")/.."
++command -v cargo >/dev/null || { echo "cargo not found" >&2; exit 1; }
++command -v cargo-ndk >/dev/null || cargo install cargo-ndk
++rustup target add aarch64-linux-android
++cd ac4-rust
++cargo ndk -t arm64-v8a -p 23 -o ../app/src/main/jniLibs build --release
+diff --git a/scripts/build-debug.ps1 b/scripts/build-debug.ps1
+new file mode 100644
+--- /dev/null
++++ b/scripts/build-debug.ps1
+@@ -0,0 +1,7 @@
++$ErrorActionPreference = "Stop"
++& (Join-Path $PSScriptRoot "build-ac4-rust.ps1")
++$Root = Resolve-Path (Join-Path $PSScriptRoot "..")
++Push-Location $Root
++try {
++    .\gradlew.bat assembleLatestUniversalDebug
++} finally { Pop-Location }
+diff --git a/scripts/build-debug.sh b/scripts/build-debug.sh
+new file mode 100644
+--- /dev/null
++++ b/scripts/build-debug.sh
+@@ -0,0 +1,5 @@
++#!/usr/bin/env bash
++set -euo pipefail
++cd "$(dirname "$0")/.."
++./scripts/build-ac4-rust.sh
++./gradlew assembleLatestUniversalDebug
