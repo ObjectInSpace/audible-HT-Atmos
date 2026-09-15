@@ -2,100 +2,102 @@
 
 Unofficial interoperability project for Audible for Android. This project is independent and is **not affiliated with, endorsed by, or sponsored by Audible or Amazon**.
 
-## What it does
+## Two independent workflows
 
-Audible 26.36.09 can advertise both AC-4 and E-AC-3/JOC spatial-audio support on capable Android devices. On the tested Google TV Streamer, Audible selected the AC-4 immersive-stereo asset, which Android rendered to two-channel output. Suppressing Audible's AC-4 capability result while leaving E-AC-3/JOC support intact causes the same title to play as Dolby Atmos through the home-theater path.
+This project provides two optional Morphe patches for Audible 26.36.09. Users can apply either patch independently, or both.
 
-This repository contains a deliberately **version-locked Morphe patch** for:
+### 1. Local Android / Google TV playback
+
+**Prefer E-AC-3/JOC spatial audio** suppresses Audible's AC-4 capability result while leaving E-AC-3/JOC available. On the tested Google TV Streamer, this changes Audible's spatial selection from the AC-4 immersive-stereo asset to the E-AC-3/JOC Atmos representation.
+
+This is useful when running the regular Android Audible app directly on an Android/Google TV device. Audible does not provide a native Android TV app; this workflow uses the sideloaded regular Android app.
+
+### 2. Cast playback
+
+**Use custom Cast receiver** replaces Audible's production Cast application ID (`25456794`) with a user-supplied Google Cast application ID.
+
+The project hosts the receiver code at:
+
+`https://objectinspace.github.io/audible-HT-Atmos/cast-receiver/`
+
+Users do **not** need to fork or host the receiver code themselves. Each user registers their own unpublished Custom Web Receiver in the Google Cast SDK Developer Console and points it at the URL above. Google assigns that user an 8-character Cast application ID, which is entered as the Morphe patch option.
+
+This keeps Cast registration and test-device authorization under each user's own Google account while allowing everyone to use the same open receiver code.
+
+## Supported Audible build
+
+Both patches are currently version-locked to:
 
 - Package: `com.audible.application`
 - Version name: `26.36.09`
 - Version code: `2090263609`
 - Tested APK: APKMirror universal APK, minSdk 28, arm64-v8a/armeabi-v7a/x86/x86_64, nodpi
 
-The implementation reproduces the single-byte DEX change from the already-tested prototype. It validates the complete SHA-256 of `classes5.dex` before writing anything, so it fails rather than patching an unexpected build. After changing the instruction byte, it regenerates the DEX SHA-1 signature and Adler-32 checksum.
+The patches fail rather than silently modifying an unexpected build.
 
-## Scope
+## Cast setup
 
-The patch changes codec capability selection only. It does **not** bypass Audible authentication, entitlement checks, Widevine, or content encryption, and it does not extract or redistribute audiobook media.
+For the Cast workflow:
 
-Users must have legitimate access to any Audible content they play. This project does not provide Audible accounts, credentials, licenses, decryption keys, or audiobook files.
+1. Open the Google Cast SDK Developer Console.
+2. Register an **unpublished Custom Web Receiver** whose receiver URL is:
+   `https://objectinspace.github.io/audible-HT-Atmos/cast-receiver/`
+3. Register the Cast/Google TV device(s) you want to use for development testing.
+4. Copy the 8-character Cast application ID assigned by Google.
+5. In Morphe Manager or Morphe Desktop, select **Use custom Cast receiver** and enter that ID in **Custom Cast receiver application ID**.
+6. Patch and install Audible.
+7. Cast normally from Audible. The patched sender launches the user's own Cast registration, which loads the shared receiver code above.
+
+The optional Web Sender at:
+
+`https://objectinspace.github.io/audible-HT-Atmos/sender/`
+
+can also launch any user-supplied receiver ID for testing. It accepts the ID interactively or via `?appId=YOUR_APP_ID`.
+
+## Receiver audio policy
+
+The receiver modifies Audible's content-license request rather than proxying media or credentials. It dynamically checks whether the Cast playback environment supports E-AC-3.
+
+- If E-AC-3 is supported, it advertises AAC-LC (`mp4a.40.2`), xHE-AAC (`mp4a.40.42`), and E-AC-3/JOC (`ec+3`) and requests spatial playback.
+- If E-AC-3 is not supported, it advertises AAC-LC and xHE-AAC and does not request spatial playback.
+- It deliberately does not advertise AC-4, because Audible may prefer its AC-4 immersive-stereo representation even where E-AC-3/JOC is the preferable home-theater source.
 
 ## Privacy and security
 
 The project does not operate a backend service and does not collect or retain Audible credentials, access tokens, listening history, audiobook content, DRM keys, or license responses.
 
-The optional Cast receiver is hosted as static client-side code. Authentication and content requests remain between the user's Cast device and Audible/Amazon services. The repository does not contain or distribute Audible APKs, decrypted media, signing material, access tokens, or DRM secrets.
+The Cast receiver is static client-side code. Authentication and content requests remain between the user's Cast device and Audible/Amazon services. The repository does not contain or distribute Audible APKs, decrypted media, signing material, access tokens, or DRM secrets.
 
-## Tested behavior
-
-Before the patch:
-
-`Audible spatial title -> AC-4 -> Android/MS12 -> 2-channel output`
-
-After the patch:
-
-`Audible spatial title -> E-AC-3/JOC -> Android Dolby pipeline -> Dolby Atmos`
-
-On the tested setup, the Sony Bravia Theater Quad reports Dolby Atmos after the patch.
+The patches do **not** bypass Audible authentication, entitlement checks, Widevine, or content encryption, and they do not extract or redistribute audiobook media. Users must have legitimate access to any Audible content they play.
 
 ## Morphe
 
-This project targets the current Morphe patch toolchain rather than ReVanced.
+Patch sources:
 
-The patch source is:
-
-`patches/src/main/kotlin/app/morphe/patches/audible/PreferJocSpatialAudioPatch.kt`
+- `patches/src/main/kotlin/app/morphe/patches/audible/PreferJocSpatialAudioPatch.kt`
+- `patches/src/main/kotlin/app/morphe/patches/audible/CustomCastReceiverPatch.kt`
 
 The project uses Morphe patches Gradle plugin 1.3.4 and Morphe Patcher 1.13.0.
 
 ### Build
 
-Morphe's build task is:
-
 ```bash
 gradle buildAndroid
 ```
 
-or, when the Gradle wrapper from the Morphe template is present:
+or, with the Gradle wrapper:
 
 ```bash
 ./gradlew buildAndroid
 ```
 
-The generated bundle is written under:
+The generated bundle is written under `patches/build/libs/*.mpp`. GitHub Actions also builds the bundle on pushes and pull requests and uploads it as a workflow artifact.
 
-`patches/build/libs/*.mpp`
-
-GitHub Actions also runs `buildAndroid` on pushes and pull requests and uploads the resulting `.mpp` as the `audible-ht-atmos-morphe-patch` workflow artifact.
-
-The current source has been successfully built by GitHub Actions as `patches-0.1.0.mpp`.
-
-### Applying for testing
-
-Use Morphe Manager or Morphe Desktop with the original supported Audible 26.36.09 APK and this `.mpp` bundle. Select **Prefer E-AC-3/JOC spatial audio** and patch the APK normally. The strict DEX hash guard will reject an APK whose `classes5.dex` is not the tested build.
-
-Because the output APK is re-signed, an installed stock Audible build signed by Amazon generally must be uninstalled before installing the patched APK.
-
-## Cast receiver workflow
-
-The Cast receiver under `docs/cast-receiver/` is an experimental interoperability component. The recommended distribution model is **not** to use a single public receiver owned by this project.
-
-Each user should instead:
-
-1. fork or otherwise host the receiver over HTTPS,
-2. register their own Custom Web Receiver in the Google Cast SDK Developer Console,
-3. register their own Cast test device(s),
-4. use the resulting Cast application ID in the project's Web Sender at `docs/sender/`, and
-5. patch their local Audible sender so its production Cast application ID (`25456794`) is replaced with their own receiver ID.
-
-The Web Sender accepts a receiver ID interactively or through `?appId=YOUR_APP_ID` and does not contain a project-global receiver ID.
-
-The current Morphe bundle contains the **native codec-selection patch only**. The Cast receiver-ID replacement was validated separately as a prototype and still needs to be packaged as a configurable Morphe patch before this becomes a one-step Cast workflow.
+Because a patched APK is re-signed, an installed stock Audible build signed by Amazon generally must be uninstalled before installing the patched APK.
 
 ## Safety / compatibility
 
-Do not remove the hash guard merely to make a newer Audible build patch. The byte offset is specific to the tested 26.36.09 DEX. Future versions should be analyzed and either given a new guarded raw patch or migrated to a semantic bytecode fingerprint once the equivalent method is identified and verified.
+Do not remove version/hash/structure guards merely to make a newer Audible build patch. Future Audible versions should be analyzed and verified before compatibility is expanded.
 
 ## Distribution
 
