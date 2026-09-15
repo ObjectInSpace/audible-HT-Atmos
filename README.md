@@ -1,19 +1,19 @@
 # Audible Home Theater Atmos patch
 
-Private prototype patch for Audible for Android.
+Private Morphe patch for Audible for Android.
 
 ## What it does
 
 Audible 26.36.09 can advertise both AC-4 and E-AC-3/JOC spatial-audio support on capable Android devices. On the tested Google TV Streamer, Audible selected the AC-4 immersive-stereo asset, which Android rendered to two-channel output. Suppressing Audible's AC-4 capability result while leaving E-AC-3/JOC support intact causes the same title to play as Dolby Atmos through the home-theater path.
 
-This repository contains a deliberately **version-locked** ReVanced raw-resource patch for:
+This repository contains a deliberately **version-locked Morphe patch** for:
 
 - Package: `com.audible.application`
 - Version name: `26.36.09`
 - Version code: `2090263609`
 - Tested APK: APKMirror universal APK, minSdk 28, arm64-v8a/armeabi-v7a/x86/x86_64, nodpi
 
-The initial implementation reproduces the single-byte DEX change from the already-tested prototype. It validates the complete SHA-256 of `classes5.dex` before writing anything, so it will fail rather than patch an unexpected build.
+The implementation reproduces the single-byte DEX change from the already-tested prototype. It validates the complete SHA-256 of `classes5.dex` before writing anything, so it fails rather than patching an unexpected build. After changing the instruction byte, it regenerates the DEX SHA-1 signature and Adler-32 checksum.
 
 ## Scope
 
@@ -31,13 +31,15 @@ After the patch:
 
 On the tested setup, the Sony Bravia Theater Quad reports Dolby Atmos after the patch.
 
-## Building
+## Morphe
 
-This repository follows the ReVanced patches template layout. GitHub Packages credentials may be required by the ReVanced Gradle plugin; see the upstream ReVanced patches template for current setup details.
+This project targets the current Morphe patch toolchain rather than ReVanced.
 
-The patch source is in:
+The patch source is:
 
-`patches/src/main/kotlin/app/revanced/patches/audible/PreferJocSpatialAudioPatch.kt`
+`patches/src/main/kotlin/app/morphe/patches/audible/PreferJocSpatialAudioPatch.kt`
+
+The project currently uses the Morphe patches Gradle plugin declared in `settings.gradle.kts`.
 
 ## Safety / compatibility
 
