@@ -28,6 +28,9 @@ jobs:
           # API 37 is not in the public SDK channel on the hosted runner yet.
           # The POC does not use API-37-only APIs; Just Player already targets 36.
           sed -i 's/compileSdk = 37/compileSdk = 36/' app/build.gradle
+          # cargo-ndk 4.x uses -P/--platform for Android API level; -p now means package.
+          sed -i 's/cargo ndk -t arm64-v8a -p 23/cargo ndk -t arm64-v8a -P 23/' scripts/build-ac4-rust.sh
+          sed -i 's/cargo ndk -t arm64-v8a -p 23/cargo ndk -t arm64-v8a -P 23/' scripts/build-ac4-rust.ps1
           git diff --check
 
       - name: Set up Java 21
