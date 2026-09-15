@@ -26,9 +26,11 @@ jobs:
           git checkout 09b7b94d39d4a679dddb43e3226c0c9c23cc1a37
           git apply ../host/tools/just-player-ac4/just-player-ac4-oxideav.patch
           cp ../host/tools/just-player-ac4/overrides/ac4-rust/src/lib.rs ac4-rust/src/lib.rs
-          # API 37 is not in the public SDK channel on the hosted runner yet.
-          # The POC does not use API-37-only APIs; Just Player already targets 36.
+          # The hosted SDK currently exposes Android 36, not the project's Android 37 platform.
+          # This clear local-file POC does not use API-37-only APIs. OkHttp 5.3.2 is also known to
+          # build against compileSdk 36, while 5.5.0 declares minCompileSdk 37.
           sed -i 's/compileSdk = 37/compileSdk = 36/' app/build.gradle
+          sed -i "s/com.squareup.okhttp3:okhttp:5.5.0/com.squareup.okhttp3:okhttp:5.3.2/" app/build.gradle
           # cargo-ndk 4.x uses -P/--platform for Android API level; -p now means package.
           sed -i 's/cargo ndk -t arm64-v8a -p 23/cargo ndk -t arm64-v8a -P 23/' scripts/build-ac4-rust.sh
           sed -i 's/cargo ndk -t arm64-v8a -p 23/cargo ndk -t arm64-v8a -P 23/' scripts/build-ac4-rust.ps1
